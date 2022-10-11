@@ -42,6 +42,7 @@ namespace Deconvolution_the_MEM
 
             j = 0;
         }
+        
         /// <summary>
         /// Метод вычислений
         /// </summary>
@@ -105,11 +106,11 @@ namespace Deconvolution_the_MEM
             var resValue = 0.0;
             var fi = new double[length];
             
-            var sum = MainFunctions.Convolusion(lambda, h);
+            var sum = Calculations.Convolusion(lambda, h);
             for (var i = 0; i < length; i++)
                 fi[i] = Math.Exp(-1 - sum[i]);
 
-            var yi = MainFunctions.Convolusion(fi, h);
+            var yi = Calculations.Convolusion(fi, h);
             for (var i = 0; i < length; i++)
                 resValue += Math.Pow(y[i] - yi[i], 2);
 

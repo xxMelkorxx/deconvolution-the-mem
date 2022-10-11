@@ -1,14 +1,18 @@
 ﻿using System;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace Deconvolution_the_MEM
 {
     public partial class MainWindow : Form
     {
-        private readonly double dt = 1f;        // Частота дискретизации
-        private readonly int length = 51;       // Число отсчётов
-        private double norma;
-        private double[] inputSgnl, pulseResponse, lambda;
+        // Частота дискретизации
+        private const double Dt = 1f;
+
+        // Число отсчётов
+        private const int Length = 51;
+        private double _coefNorm;
+        private double[] _inputSignal, _pulseResponse, _lambda;
 
         public MainWindow()
         {
@@ -17,52 +21,70 @@ namespace Deconvolution_the_MEM
 
         private void MainWindow_Load(object sender, EventArgs e)
         {
-            OnClickButtonGenerateSgnl(null, EventArgs.Empty);
+            OnClickButtonGenerateSignal(null, EventArgs.Empty);
         }
 
-        private void OnClickButtonGenerateSgnl(object sender, EventArgs e)
+        private void OnClickButtonGenerateSignal(object sender, EventArgs e)
         {
-            // Инициализация параметров.
-            var A1 = (double)numUpDown_amplitude1.Value;
-            var A2 = (double)numUpDown_amplitude2.Value;
-            var A3 = (double)numUpDown_amplitude3.Value;
-            var sigma1 = (double)numUpDown_standartDeviation1.Value;
-            var sigma2 = (double)numUpDown_standartDeviation2.Value;
-            var sigma3 = (double)numUpDown_standartDeviation3.Value;
-            var t01 = (double)numUpDown_mathExpectation1.Value;
-            var t02 = (double)numUpDown_mathExpectation2.Value;
-            var t03 = (double)numUpDown_mathExpectation3.Value;
-            var APR = (double)numUpDown_amplitudePR.Value;
-            var sigmaPR = (double)numUpDown_standartDeviationPR.Value;
-            var energyNoise = (int)numUpDown_energyNoise.Value;
-            
             // Исходный сигнал.
-            inputSgnl = MainFunctions.GenerateGaussSignal(length, new double[3] { A1, A2, A3 }, new double[3] { t01, t02, t03 }, new double[3] { sigma1, sigma2, sigma3 }, dt);
-            // Импульсной характеристики.
-            pulseResponse = MainFunctions.GenerateGaussSignal(length, new double[1] { APR }, new double[1] { 0.0 }, new double[1] { sigmaPR }, dt);
-            for (var i = 0; i < length / 2; i++)
-                pulseResponse[length - i - 1] = pulseResponse[i];
-            // Выходной сигнал.
-            var outputSgnl = MainFunctions.Convolusion(inputSgnl, pulseResponse);
-            if (checkBox_onoffNoise.Checked == true)    // Наложение шума на выходной сигнал
-                outputSgnl = MainFunctions.NoiseSignal(outputSgnl, energyNoise);
-            norma = MainFunctions.MaxArray(inputSgnl) / MainFunctions.MaxArray(outputSgnl);
-            for (var i = 0; i < length; i++)            // Нормировка
-                outputSgnl[i] *= norma;
+            _inputSignal = Calculations.GenerateGaussSignal(Length, new[]
+            {
+                (double)numUpDown_a1.Value,
+                (double)numUpDown_a2.Value,
+                (double)numUpDown_a3.Value
+            }, new[]
+            {
+                (double)numUpDown_shift1.Value,
+                (double)numUpDown_shift2.Value,
+                (double)numUpDown_shift3.Value
+            }, new[]
+            {
+                (double)numUpDown_sigma1.Value,
+                (double)numUpDown_sigma2.Value,
+                (double)numUpDown_sigma3.Value
+            }, Dt);
 
+            // Импульсная характеристика.
+            _pulseResponse = Calculations.GenerateGaussSignal(Length, new[]
+            {
+                (double)numUpDown_aPR.Value
+            }, new[]
+            {
+                0.0
+            }, new[]
+            {
+                (double)numUpDown_sigmaPR.Value
+            }, Dt);
+
+            for (var i = 0; i < Length / 2; i++)
+                _pulseResponse[Length - i - 1] = _pulseResponse[i];
+
+            // Выходной сигнал.
+            var outputSignal = Calculations.Convolusion(_inputSignal, _pulseResponse);
+
+            // Наложение шума на выходной сигнал
+            if (checkBox_onoffNoise.Checked)
+                outputSignal = Calculations.NoiseSignal(outputSignal, (int)numUpDown_energyNoise.Value);
+
+            _coefNorm = _inputSignal.Max() / outputSignal.Max();
+            for (var i = 0; i < Length; i++) // Нормировка
+                outputSignal[i] *= _coefNorm;
+
+            // Массив неопределённых коэффициентов Лагранжа
+            _lambda = new double[Length];
             // Инициализация Хука-Дживса.
-            lambda = new double[length];             // Массив неопределённых коэффициентов Лагранжа
-            Metod_HJ.InitializationMHJ(ref lambda, outputSgnl, pulseResponse);
+            Metod_HJ.InitializationMHJ(ref _lambda, outputSignal, _pulseResponse);
 
             // Отрисовка графиков.
-            chart_graphInitReconstSgnl.ChartAreas[0].AxisY.Maximum = MainFunctions.MaxArray(inputSgnl) * 1.1;
+            chart_graphInitReconstSgnl.ChartAreas[0].AxisY.Maximum = _inputSignal.Max() * 1.1;
             chart_graphInitReconstSgnl.Series[0].Points.Clear();
             chart_graphPulseResponseOutSgnl.Series[0].Points.Clear();
             chart_graphPulseResponseOutSgnl.Series[1].Points.Clear();
-            for (int i = 0; i < length; i++) {
-                chart_graphInitReconstSgnl.Series[0].Points.AddXY(dt * i, inputSgnl[i]);
-                chart_graphPulseResponseOutSgnl.Series[0].Points.AddXY(dt * i, pulseResponse[i]);
-                chart_graphPulseResponseOutSgnl.Series[1].Points.AddXY(dt * i, outputSgnl[i]);
+            for (var i = 0; i < Length; i++)
+            {
+                chart_graphInitReconstSgnl.Series[0].Points.AddXY(Dt * i, _inputSignal[i]);
+                chart_graphPulseResponseOutSgnl.Series[0].Points.AddXY(Dt * i, _pulseResponse[i]);
+                chart_graphPulseResponseOutSgnl.Series[1].Points.AddXY(Dt * i, outputSignal[i]);
             }
 
             button_Start.Enabled = true;
@@ -71,32 +93,34 @@ namespace Deconvolution_the_MEM
         private void OnTickTimer(object sender, EventArgs e)
         {
             // Подсчёт функционала.
-            int iterations = 100;
-            var fb = Metod_HJ.CalculationMHJ(ref lambda, iterations);
-            textBox_valueFunctional.Text = string.Format("{0}", fb);
+            const int iterations = 100;
+            var fb = Metod_HJ.CalculationMHJ(ref _lambda, iterations);
+            textBox_valueFunctional.Text = fb.ToString("F5");
 
-            var reconstSgnl = new double[length];
-            var sum = MainFunctions.Convolusion(lambda, pulseResponse);
-            for (var i = 0; i < length; i++)
-                reconstSgnl[i] = Math.Exp(-1 - sum[i]) / norma;
+            var restoreSignal = new double[Length];
+            var sum = Calculations.Convolusion(_lambda, _pulseResponse);
+            for (var i = 0; i < Length; i++)
+                restoreSignal[i] = Math.Exp(-1 - sum[i]) / _coefNorm;
 
             // Подсчёт отклонения.
-            textBox_deviation.Text = string.Format("{0}", MainFunctions.Deviation(inputSgnl, reconstSgnl));
+            textBox_deviation.Text = Calculations.Deviation(_inputSignal, restoreSignal).ToString("F5");
 
             // Отрисовка графиков.
             chart_graphInitReconstSgnl.Series[1].Points.Clear();
-            for (int i = 0; i < length; i++)
-                chart_graphInitReconstSgnl.Series[1].Points.AddXY(dt * i, reconstSgnl[i]);
+            for (var i = 0; i < Length; i++)
+                chart_graphInitReconstSgnl.Series[1].Points.AddXY(Dt * i, restoreSignal[i]);
         }
 
         private void OnClickButtonStart(object sender, EventArgs e)
         {
-            if (timer.Enabled) {
+            if (timer.Enabled)
+            {
                 timer.Stop();
                 button_Start.Text = "Старт!";
                 textBox_accuracy.ReadOnly = false;
             }
-            else {
+            else
+            {
                 timer.Start();
                 button_Start.Text = "Стоп!";
                 textBox_accuracy.ReadOnly = true;
